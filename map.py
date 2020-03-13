@@ -1,5 +1,4 @@
 import os
-# import re
 import pandas as pd
 
 # Variables
@@ -18,8 +17,16 @@ df = df[df['Server Name'].notna()]
 # Remove server names that are numeric
 df = df[df['Server Name'].str.len().notna()]
 
+print(f"IEDS: {len(df)} rows, {len(df.columns)} columns")
+
 # Import filter
-row_filter = pd.read_excel(os.path.join('data', rules_xls), sheet_name=filter_tab)
+fdf = pd.read_excel(os.path.join('data', rules_xls), sheet_name=filter_tab)
+fstr = fdf.iloc[0, 0]
+
+# Filter data frame
+df = df[df.eval(fstr)]
+
+print(f"Filter: {len(df)} rows, {len(df.columns)} columns")
 
 # Import rules
 rdf = pd.read_excel(os.path.join('data', rules_xls), sheet_name=rules_tab)
@@ -29,11 +36,9 @@ df.columns = df.columns.str.replace('#', 'Num')
 rdf = rdf.replace(regex=r'# ', value = "Num ")
 # df.columns = df.columns.str.replace(' ', '_')
 
-
-f1 = "`Num Cores` * .5 <= 8"
-
 output = pd.DataFrame()
 
+print("Applying rules: ...")
 # Iterate over rows
 for i in range(0, len(df)):
     # Select row as data frame preserving field types
@@ -54,12 +59,11 @@ for i in range(0, len(df)):
     server = server.replace(regex=r', $', value="")
     output = output.append(server)
 
-
 output.columns = output.columns.str.replace('Num', '#')
 
 # writer = pd.ExcelWriter(os.path.join('data', ieds_xls), engine='xlsxwriter')
 
-print('done')
+print('Done')
 
 
 
