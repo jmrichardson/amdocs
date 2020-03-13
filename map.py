@@ -4,16 +4,22 @@ import pandasql
 
 # Variables
 ieds_xls = "New TLG Inventory 02-28-2020.xlsx"
-xls_tab_name = "Source-IEDS ref-Jeff"
+ieds_tab = "Source-IEDS ref-Jeff"
+rules_xls = "rules.xlsx"
+rules_tab = "Rules"
 
-# Import into pandas
-df = pd.read_excel(os.path.join('data', ieds_xls), sheet_name=xls_tab_name)
+
+# Import IEDS into data frame
+df = pd.read_excel(os.path.join('data', ieds_xls), sheet_name=ieds_tab)
 
 # Remove server names that are null
 df = df[df['Server Name'].notna()]
 
 # Remove server names that are numeric
 df = df[df['Server Name'].str.len().notna()]
+
+# Import rules
+rdf = pd.read_excel(os.path.join('data', rules_xls), sheet_name=rules_tab)
 
 
 ### Filter examples
