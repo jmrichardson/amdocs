@@ -25,7 +25,6 @@ fstr = fdf.iloc[0, 0]
 
 # Filter data frame
 df = df[df.eval(fstr)]
-
 print(f"Filter: {len(df)} rows, {len(df.columns)} columns")
 
 # Import rules
