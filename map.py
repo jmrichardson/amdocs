@@ -21,7 +21,6 @@ df = df[df['Server Name'].str.len().notna()]
 # Import rules
 rdf = pd.read_excel(os.path.join('data', rules_xls), sheet_name=rules_tab)
 
-
 ### Filter examples
 # df[df['# Cores'] < 48]
 # pandasql.sqldf("SELECT * FROM df WHERE '# Cores' < 128.0")
