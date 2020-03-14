@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import xlsxwriter
 
 # Variables
 ieds_xls = "New TLG Inventory 02-28-2020.xlsx"
@@ -59,10 +60,22 @@ for i in range(0, len(df)):
     output = output.append(server)
 
 output.columns = output.columns.str.replace('Num', '#')
+output.reset_index(level=0, inplace=True)
+output = output.rename(columns={'index':'Row #'})
+output['Row #'] = output['Row #'] + 2
 
-# writer = pd.ExcelWriter(os.path.join('data', ieds_xls), engine='xlsxwriter')
+map_tab = 'Mapping'
+writer = pd.ExcelWriter(os.path.join('output', "data_analysis.xlsx"), engine='xlsxwriter')
+output.to_excel(writer, sheet_name=map_tab)
+
+workbook = writer.book
+worksheet = writer.sheets[map_tab]
+
+writer.save()
 
 print('Done')
 
 
 
+
+pd.Ex
