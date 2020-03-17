@@ -82,13 +82,24 @@ adf.to_excel(writer, sheet_name="IEDS ESX")
 filter_str = '`Hardware Abstraction` != "Vmguest" & \
   (`Environment` == "Production" | `Environment_dup` == "Production" | `Environment` == "" | `Environment_dup` == "") & \
   `IEDS status` == "Production" & \
-  `Server Model` != "VMWARE VIRTUAL PLATFORM"'
+  `Server Model` != "Vmware virtual platform"'
 
 
 fdf = adf[adf.eval(filter_str)]
 print(f"Filtered Data: {fdf.shape[0]} rows, {fdf.shape[1]} columns")
-fdf = fdf[['Hostname'] + [col for col in fdf.columns if col != 'Hostname']]
-fdf.to_excel(writer, sheet_name="Filter Data")
+# fdf = fdf[['Hostname'] + [col for col in fdf.columns if col != 'Hostname']]
+fdf.to_excel(writer, sheet_name="Filter")
+
+# No HW Abstraction
+hdf = fdf[fdf.eval("`Hardware Abstraction` == ''")]
+print(f"No Hardware Abstraction: {hdf.shape[0]} rows, {hdf.shape[1]} columns")
+hdf.to_excel(writer, sheet_name="Filter No HWA")
+
+# Non filtered data
+nfdf = adf[~adf.eval(filter_str)]
+print(f"Non Filtered Data: {nfdf.shape[0]} rows, {nfdf.shape[1]} columns")
+# nfdf = nfdf[['Hostname'] + [col for col in fdf.columns if col != 'Hostname']]
+nfdf.to_excel(writer, sheet_name="Non Filter")
 
 
 ### Rules
