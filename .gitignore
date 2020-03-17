@@ -4,3 +4,4 @@ data/~$rules.xlsx
 output/data_analysis.xlsx
 data/TLG-MOB ESX Servers v1.xlsx
 df.xlsx
+__pycache*

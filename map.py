@@ -91,13 +91,17 @@ for i in range(0, len(df)):
 output.columns = output.columns.str.replace('Num', '#')
 output = output.dropna(axis=1, how='all')
 
+for col in output.columns:
+    if output[col].dtype.kind == 'O':
+        print(col)
+        output[col] = output[col].str.strip().str.capitalize()
+
 # output.reset_index(level=0, inplace=True)
 # output = output.rename(columns={'index':'Row #'})
 # output['Row #'] = output['Row #'] + 2
 
-map_tab = 'Mapping'
 
-
+map_tab = "RuleTargets"
 
 writer = pd.ExcelWriter(os.path.join('output', "data_analysis.xlsx"), engine='xlsxwriter')
 output.to_excel(writer, sheet_name=map_tab, startrow=1, startcol=0, header=False, index=False)
@@ -115,21 +119,51 @@ header_format = workbook.add_format({
 for col_num, value in enumerate(output.columns.values):
     worksheet.write(0, col_num, value, header_format)
 
-def get_col_widths(dataframe):
-    # First we find the maximum length of the index column
-    # idx_max = max([len(str(s)) for s in dataframe.index.values] + [len(str(dataframe.index.name))])
-    # Then, we concatenate this to the max of the lengths of column name and its values for each column, left to right
-    return [max([len(str(s))+3 for s in dataframe[col].values] + [len(col)+3]) for col in dataframe.columns]
+hide_columns = ['Add Date', 'Additional Info', 'App Dependencies', 'Cluster Name', 'Comments', 'DNS',
+                'CPU Model', 'CPU Speed',
+                'Environment Details', 'IP Address', 'Inventory check', 'MOTS ID', 'MOTS Name', 'Market(s)',
+                'Max # of Cores Used', 'Max CPU %', 'Max Disk IO', 'Max RAM % Used', 'Max RAM used (GB)',
+                'Max Run Queue', 'Max Specints Used', 'Non-TLG MOTS', '#bering', 'OS', 'OS Level',
+                'OS Major Version', 'OS Patch Level', 'OS Version', 'OS_ESX_Dup', 'Server Description',
+                'Specint', 'State', 'Storage (GB)', 'Tablespace Size Allocated (GB)', 'Total NAS Allocated (GB)',
+                'Total NAS Used (GB)', 'Total SAN Allocated (GB)', 'Total SAN Allocated (GB)', 'Total SAN Used (GB)',
+                'VPMO', '~EOSL']
+
+for i in range(0, len(output.columns)-1):
+    col = output.columns[i]
+    width = max([len(str(s)) + 3 for s in output[col].values] + [len(col) + 3])
+    if output.columns[i] in hide_columns:
+        worksheet.set_column(i, i, width, None, {'hidden': True})
+    else:
+        worksheet.set_column(i, i, width)
 
 
 
-for i, width in enumerate(get_col_widths(output)):
-    worksheet.set_column(i, i, width)
 
+output['Target'] = output['Target'].replace(np.nan, '', regex=True)
+output['Environment'] = output['Environment'].replace(np.nan, '', regex=True)
+output['Data Center'] = output['Data Center'].replace(np.nan, '', regex=True)
+pt = pd.pivot_table(output, index=['Data Center', 'Target'],
+                    columns="Environment",
+                    values=["Hostname"],
+                    aggfunc="count",
+                    margins=True,
+                    margins_name="Total",
+                    dropna=True)
+pt
+# pt = pd.pivot_table(o, index=['Data Center', 'Target'], values=["Hostname"], aggfunc=lambda x: x.count(), dropna=False)
 
+pt.to_excel(writer, sheet_name="Summary")
+worksheet = writer.sheets["Summary"]
+worksheet.set_column(0, 0, 15)
+worksheet.set_column(1, 1, 15)
+worksheet.set_column(2, 12, 12)
+# worksheet7.conditional_format('B3:B14', {'type': '2_color_scale'})
 
 
 writer.save()
+
+workbook.close()
 
 print('Done')
 
