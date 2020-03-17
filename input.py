@@ -6,10 +6,6 @@ import numpy as np
 # import datacompy
 
 
-parms_xls = "parameters.xlsx"
-rules_tab = "Rules"
-filter_tab = "Filter"
-
 # Create data import progress spreadsheet
 writer = pd.ExcelWriter(os.path.join('output', 'data_import.xlsx'), engine='xlsxwriter')
 
@@ -64,6 +60,10 @@ dups = adf[adf.duplicated('Hostname')]
 print(f"IEDS ESX Merged Duplicate Rows: {dups.shape[0]}")
 # Move hostname col to first column
 adf = adf[['Hostname'] + [col for col in adf.columns if col != 'Hostname']]
+# Repalce nans with empty string for non float columns
+for col in adf.columns:
+    if adf[col].dtype.kind == 'O':
+        adf[col].replace(np.nan, '', regex=True, inplace=True)
 
 # Capitalize first letter and lowercase the rest of each word (consistent data)
 for col in adf.columns:
@@ -78,8 +78,12 @@ adf.to_excel(writer, sheet_name="IEDS ESX")
 
 
 # Filter
-filter_str = '(`Environment` == "Production" | `Environment_dup` == "Production") & \
-`Server Model` != "VMWARE VIRTUAL PLATFORM"'
+# Note duplicate columns:  Comments_dup, Environment_dup, OS_dup
+filter_str = '`Hardware Abstraction` != "Vmguest" & \
+  (`Environment` == "Production" | `Environment_dup` == "Production" | `Environment` == "" | `Environment_dup` == "") & \
+  `IEDS status` == "Production" & \
+  `Server Model` != "VMWARE VIRTUAL PLATFORM"'
+
 
 fdf = adf[adf.eval(filter_str)]
 print(f"Filtered Data: {fdf.shape[0]} rows, {fdf.shape[1]} columns")
@@ -96,9 +100,17 @@ fdf.to_excel(writer, sheet_name="Filter Data")
 # Data words are fist letter capital rest undercase
 # One to one mapping
 rules = [
-    ['`Environment` == "Production"',  "DL360"],
-    ['`Layer` == "Application"', "DL380"],
-    ['`# Cores` > 80', "DL580"],
+    ['`Memory (GB)` < 1000',  "DL3601s"],
+    ['`# Cores` < 24', "DL3601s"],
+    ['`Memory (GB)` >= 1000', "DL3602s"],
+    ['`# Cores` >= 24', "DL3602s"],
+    ['`# Cores` >= 48', "DL580"],
+    ['`Purpose` == "Customer"', "DL580"],
+    ['`Purpose` == "Customer - tra"', "DL580"],
+    ['`Purpose` == "Archangel"', "Ignore"],
+    ['`Server Model` == "Vmware virtual platform"', "Ignore"],
+    ['`Purpose` == "Media server"', "Ignore"],
+    ['`Purpose` == "Fbf"', "Ignore"],
 ]
 
 rdf = pd.DataFrame(rules, columns=['Rule', 'Target'])

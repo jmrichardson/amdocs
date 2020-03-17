@@ -12,6 +12,16 @@ df = df.replace(np.nan, '', regex=True)
 # Create xlsxwriter
 writer = pd.ExcelWriter(os.path.join('output', 'data_analysis.xlsx'), engine='xlsxwriter')
 
+pt = pd.pivot_table(df, index=['Data Center'],
+                    columns="Target",
+                    values=["Hostname"],
+                    aggfunc="count",
+                    margins=True,
+                    margins_name="Total",
+                    dropna=False)
+pt.to_excel(writer, sheet_name="DataCenter-Target")
+
+
 pt = pd.pivot_table(df, index=['Data Center', 'Target'],
                     columns="Environment",
                     values=["Hostname"],
@@ -21,14 +31,6 @@ pt = pd.pivot_table(df, index=['Data Center', 'Target'],
                     dropna=False)
 pt.to_excel(writer, sheet_name="DataCenter Target-Env")
 
-pt = pd.pivot_table(df, index=['Data Center'],
-                    columns="Target",
-                    values=["Hostname"],
-                    aggfunc="count",
-                    margins=True,
-                    margins_name="Total",
-                    dropna=False)
-pt.to_excel(writer, sheet_name="DataCenter-Target")
 
 pt = pd.pivot_table(df, index=['Purpose'],
                     columns="Hardware Abstraction",
@@ -59,6 +61,9 @@ pt = pd.pivot_table(df[df.eval('`Hardware Abstraction` == ""')], index=['Hardwar
                     dropna=False)
 pt.to_excel(writer, sheet_name="Undetermined Hosts")
 
+
+data = df[df['Target'] == "Ignore"]
+data.to_excel(writer, sheet_name="Ignore")
 
 
 
