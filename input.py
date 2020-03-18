@@ -28,6 +28,14 @@ esdf.sort_values("Hostname", inplace=True)
 esdf.to_excel(writer, sheet_name="Prod Servers")
 print(f"Prod Servers: {esdf.shape[0]} rows, {esdf.shape[1]} columns")
 
+### VM
+vfilter = '`Hardware Abstraction` == "VMGuest" & ' \
+          '`MOTS Name` == "M-TLG"'
+vmdf = esdf[esdf.eval(vfilter)].copy()
+vmdf.sort_values("Hostname", inplace=True)
+vmdf.to_excel(writer, sheet_name="VMs")
+print(f"VMGuests: {vmdf.shape[0]} rows, {vmdf.shape[1]} columns")
+
 # Import ESX Production ESX
 epdf = pd.read_excel(os.path.join('data', 'TLG-MOB ESX Servers v1.xlsx'), sheet_name="TLG Production ESX")
 epdf.sort_values("Hostname", inplace=True)
@@ -48,6 +56,7 @@ dups.to_excel(writer, sheet_name="ESX Dups")
 
 ## TODO - Do we drop duplicate rows?
 # edf.drop_duplicates(subset="Hostname", keep=False, inplace=True)
+
 
 adf = pd.merge(left=idf, right=edf, how='outer', left_on='Hostname', right_on='Hostname', suffixes=("", "_dup"))
 adf = adf.sort_index(axis=1)
@@ -72,6 +81,20 @@ for col in adf.columns:
 
 adf.to_excel(writer, sheet_name="IEDS ESX")
 # df = df.replace(np.nan, '', regex=True)
+
+### VM
+vdf = pd.merge(left=idf, right=vmdf, how='outer', left_on='Hostname', right_on='Hostname', suffixes=("", "_dup"))
+vdf = vdf.sort_index(axis=1)
+vdf.sort_values("Hostname", inplace=True)
+vdf.columns = vdf.columns.str.replace('#', 'Num')
+vdf = vdf[['Hostname'] + [col for col in vdf.columns if col != 'Hostname']]
+for col in vdf.columns:
+    if vdf[col].dtype.kind == 'O':
+        vdf[col].replace(np.nan, '', regex=True, inplace=True)
+for col in vdf.columns:
+    if vdf[col].dtype.kind == 'O':
+        vdf[col] = vdf[col].str.strip().str.capitalize()
+vdf.to_excel(writer, sheet_name="IEDS VMGuests")
 
 
 ### Filter working data set
@@ -100,6 +123,26 @@ nfdf = adf[~adf.eval(filter_str)]
 print(f"Non Filtered Data: {nfdf.shape[0]} rows, {nfdf.shape[1]} columns")
 # nfdf = nfdf[['Hostname'] + [col for col in fdf.columns if col != 'Hostname']]
 nfdf.to_excel(writer, sheet_name="Non Filter")
+
+
+### VM
+filter_str = '(`Environment` == "Production" | `Environment_dup` == "Production" | `Environment` == "" | `Environment_dup` == "") & \
+  `IEDS status` == "Production"'
+vfdf = vdf[vdf.eval(filter_str)]
+print(f"Filtered Data: {vfdf.shape[0]} rows, {vfdf.shape[1]} columns")
+# vfdf = vfdf[['Hostname'] + [col for col in vfdf.columns if col != 'Hostname']]
+vfdf.to_excel(writer, sheet_name="VM Filter")
+
+
+# Target systems
+targets = [
+    ['DL3601s', 24, 128],
+    ['DL3602s', 48, 256],
+    ['DL380', 96, 1024],
+    ['DL580', 128, 2048],
+]
+tgdf = pd.DataFrame(targets, columns=['Target', 'Cores', 'Memory'])
+tgdf.to_excel(writer, sheet_name="Targets")
 
 
 ### Rules
@@ -152,6 +195,44 @@ for i in range(0, len(fdf)):
 
 tdf.columns = tdf.columns.str.replace('Num', '#')
 tdf = tdf[['Hostname'] + [col for col in tdf.columns if col != 'Hostname']]
+
+# Calculations
+
 tdf.to_excel(writer, sheet_name="Target")
+
+
+
+###VM
+# Apply Rules
+vtdf = pd.DataFrame()
+print("Applying virt rules: ...")
+# Iterate over rows
+for i in range(0, len(vfdf)):
+    # Select row as data frame preserving field types
+    server = pd.DataFrame(vfdf.iloc[i:i+1, :])
+
+    # Iterate over rules
+    server['Rules'] = ''
+    for idx, row in rdf.iterrows():
+        rule = row['Rule']
+
+        res = server.eval(rule)
+
+        if res.iloc[0]:
+            server['Target'] = rdf.iloc[idx, 1]
+            server['Rules'] = server['Rules'] + str(idx) + ', '
+
+    server = server.replace(regex=r', $', value="")
+    vtdf = vtdf.append(server)
+
+vtdf.columns = vtdf.columns.str.replace('Num', '#')
+vtdf = vtdf[['Hostname'] + [col for col in vtdf.columns if col != 'Hostname']]
+vtdf.to_excel(writer, sheet_name="VM Target")
+
+
+
+
+
+
 writer.save()
 
