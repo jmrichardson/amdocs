@@ -21,38 +21,39 @@ idf.sort_values("Hostname", inplace=True)
 # Export IEDS data
 idf.to_excel(writer, sheet_name="IEDS")
 print(f"IEDS: {idf.shape[0]} rows, {idf.shape[1]} columns")
+idf.columns
 
 # Import ESX Production Servers
 esdf = pd.read_excel(os.path.join('data', 'TLG-MOB ESX Servers v1.xlsx'), sheet_name="TLG Production Servers")
 esdf.sort_values("Hostname", inplace=True)
-esdf.to_excel(writer, sheet_name="Prod Servers")
+esdf.to_excel(writer, sheet_name="ESX Prod Srv")
 print(f"Prod Servers: {esdf.shape[0]} rows, {esdf.shape[1]} columns")
 
 ### VM
-vfilter = '`Hardware Abstraction` == "VMGuest" & ' \
-          '`MOTS Name` == "M-TLG"'
+# Working off of the TLG prod servers tab
+vfilter = '`Hardware Abstraction` == "VMGuest" & `MOTS Name` == "M-TLG"'
 vmdf = esdf[esdf.eval(vfilter)].copy()
 vmdf.sort_values("Hostname", inplace=True)
-vmdf.to_excel(writer, sheet_name="VMs")
+vmdf.to_excel(writer, sheet_name="ESX VMs")
 print(f"VMGuests: {vmdf.shape[0]} rows, {vmdf.shape[1]} columns")
 
 # Import ESX Production ESX
 epdf = pd.read_excel(os.path.join('data', 'TLG-MOB ESX Servers v1.xlsx'), sheet_name="TLG Production ESX")
 epdf.sort_values("Hostname", inplace=True)
-epdf.to_excel(writer, sheet_name="Prod ESX")
+epdf.to_excel(writer, sheet_name="Prod ESX Hosts")
 print(f"Prod ESX: {epdf.shape[0]} rows, {epdf.shape[1]} columns")
 
 # Combined ESX data
 edf = pd.concat([epdf, esdf])
 edf.sort_values("Hostname", inplace=True)
-edf.to_excel(writer, sheet_name="ESX")
+edf.to_excel(writer, sheet_name="Comb ESX")
 print(f"ESX Combined: {edf.shape[0]} rows, {edf.shape[1]} columns")
 
 # Duplicates
 dups = edf[edf.duplicated('Hostname')]
 print(f"ESX Duplicate Rows: {dups.shape[0]}")
 dups = edf[edf.duplicated('Hostname', keep=False)]
-dups.to_excel(writer, sheet_name="ESX Dups")
+# dups.to_excel(writer, sheet_name="ESX Dups")
 
 ## TODO - Do we drop duplicate rows?
 # edf.drop_duplicates(subset="Hostname", keep=False, inplace=True)
@@ -79,8 +80,11 @@ for col in adf.columns:
     if adf[col].dtype.kind == 'O':
         adf[col] = adf[col].str.strip().str.capitalize()
 
-adf.to_excel(writer, sheet_name="IEDS ESX")
-# df = df.replace(np.nan, '', regex=True)
+# Label hardware abstraction
+adf.loc[adf.eval('`Hardware Abstraction` == "" & `Server Model` == "Vmware virtual platform"'), 'Hardware Abstraction'] = 'Vmguest'
+adf.loc[adf.eval('`Hardware Abstraction` == "" & ( `Server Model` != "Vmware virtual platform" | `Server Model` != "")'), 'Hardware Abstraction'] = 'Bare-metal'
+adf.to_excel(writer, sheet_name="IEDS Comb ESX")
+
 
 ### VM
 vdf = pd.merge(left=idf, right=vmdf, how='outer', left_on='Hostname', right_on='Hostname', suffixes=("", "_dup"))
@@ -94,7 +98,10 @@ for col in vdf.columns:
 for col in vdf.columns:
     if vdf[col].dtype.kind == 'O':
         vdf[col] = vdf[col].str.strip().str.capitalize()
-vdf.to_excel(writer, sheet_name="IEDS VMGuests")
+# Label hardware abstraction
+vdf.loc[vdf.eval('`Hardware Abstraction` == "" & `Server Model` == "Vmware virtual platform"'), 'Hardware Abstraction'] = 'Vmguest'
+vdf.loc[vdf.eval('`Hardware Abstraction` == "" & ( `Server Model` != "Vmware virtual platform" | `Server Model` != "")'), 'Hardware Abstraction'] = 'Bare-metal'
+vdf.to_excel(writer, sheet_name="IEDS VMs")
 
 
 ### Filter working data set
@@ -102,27 +109,31 @@ vdf.to_excel(writer, sheet_name="IEDS VMGuests")
 
 # Filter
 # Note duplicate columns:  Comments_dup, Environment_dup, OS_dup
-filter_str = '`Hardware Abstraction` != "Vmguest" & \
+filter_str = '`Hardware Abstraction` == "Bare-metal" & \
   (`Environment` == "Production" | `Environment_dup` == "Production" | `Environment` == "" | `Environment_dup` == "") & \
   `IEDS status` == "Production" & \
   `Server Model` != "Vmware virtual platform"'
+
+vfilter_str = '`Hardware Abstraction` == "Bare-metal" & \
+
 
 
 fdf = adf[adf.eval(filter_str)]
 print(f"Filtered Data: {fdf.shape[0]} rows, {fdf.shape[1]} columns")
 # fdf = fdf[['Hostname'] + [col for col in fdf.columns if col != 'Hostname']]
-fdf.to_excel(writer, sheet_name="Filter")
+fdf.to_excel(writer, sheet_name="Filter IEDS ESX")
+
+
 
 # No HW Abstraction
-hdf = fdf[fdf.eval("`Hardware Abstraction` == ''")]
-print(f"No Hardware Abstraction: {hdf.shape[0]} rows, {hdf.shape[1]} columns")
-hdf.to_excel(writer, sheet_name="Filter No HWA")
+# hdf = fdf[fdf.eval("`Hardware Abstraction` == ''")]
+# print(f"No Hardware Abstraction: {hdf.shape[0]} rows, {hdf.shape[1]} columns")
+# hdf.to_excel(writer, sheet_name="Filter No HWA")
 
 # Non filtered data
 nfdf = adf[~adf.eval(filter_str)]
 print(f"Non Filtered Data: {nfdf.shape[0]} rows, {nfdf.shape[1]} columns")
-# nfdf = nfdf[['Hostname'] + [col for col in fdf.columns if col != 'Hostname']]
-nfdf.to_excel(writer, sheet_name="Non Filter")
+nfdf.to_excel(writer, sheet_name="Non Filter IEDS ESX")
 
 
 ### VM
@@ -130,8 +141,11 @@ filter_str = '(`Environment` == "Production" | `Environment_dup` == "Production"
   `IEDS status` == "Production"'
 vfdf = vdf[vdf.eval(filter_str)]
 print(f"Filtered Data: {vfdf.shape[0]} rows, {vfdf.shape[1]} columns")
-# vfdf = vfdf[['Hostname'] + [col for col in vfdf.columns if col != 'Hostname']]
-vfdf.to_excel(writer, sheet_name="VM Filter")
+vfdf.to_excel(writer, sheet_name="Filter IEDS VMs")
+
+nvfdf = adf[~adf.eval(filter_str)]
+print(f"Non Filtered Data: {nvfdf.shape[0]} rows, {nvfdf.shape[1]} columns")
+nvfdf.to_excel(writer, sheet_name="Non Filter IEDS VMs")
 
 
 # Target systems
@@ -140,6 +154,7 @@ targets = [
     ['DL3602s', 48, 256],
     ['DL380', 96, 1024],
     ['DL580', 128, 2048],
+    ['', np.nan, np.nan],
 ]
 tgdf = pd.DataFrame(targets, columns=['Target', 'Cores', 'Memory'])
 tgdf.to_excel(writer, sheet_name="Targets")
@@ -161,77 +176,58 @@ rules = [
     ['`# Cores` >= 48', "DL580"],
     ['`Purpose` == "Customer"', "DL580"],
     ['`Purpose` == "Customer - tra"', "DL580"],
-    ['`Purpose` == "Archangel"', "Ignore"],
-    ['`Server Model` == "Vmware virtual platform"', "Ignore"],
-    ['`Purpose` == "Media server"', "Ignore"],
-    ['`Purpose` == "Fbf"', "Ignore"],
+    ['`Purpose` == "Customer - tra"', "DL580"],
 ]
 
 rdf = pd.DataFrame(rules, columns=['Rule', 'Target'])
 rdf.to_excel(writer, sheet_name="Rules")
 rdf = rdf.replace(regex=r'# ', value="Num ")
 
-# Apply Rules
-tdf = pd.DataFrame()
-print("Applying rules: ...")
-# Iterate over rows
-for i in range(0, len(fdf)):
-    # Select row as data frame preserving field types
-    server = pd.DataFrame(fdf.iloc[i:i+1, :])
 
-    # Iterate over rules
-    server['Rules'] = ''
-    for idx, row in rdf.iterrows():
-        rule = row['Rule']
+def applyRules(df):
 
-        res = server.eval(rule)
+    tdf = pd.DataFrame()
+    print("Applying rules: ...")
+    # Iterate over rows
+    for i in range(0, len(df)):
+        # Select row as data frame preserving field types
+        server = pd.DataFrame(df.iloc[i:i+1, :]).copy()
 
-        if res.iloc[0]:
-            server['Target'] = rdf.iloc[idx, 1]
-            server['Rules'] = server['Rules'] + str(idx) + ', '
+        # Iterate over rules
+        server['Rules'] = ''
+        server['Target'] = ''
+        for idx, row in rdf.iterrows():
+            rule = row['Rule']
+            res = server.eval(rule)
+            if res.iloc[0]:
+                server['Target'] = rdf.iloc[idx, 1]
+                server['Rules'] = server['Rules'] + str(idx) + ', '
 
-    server = server.replace(regex=r', $', value="")
-    tdf = tdf.append(server)
+        server = server.replace(regex=r', $', value="")
 
-tdf.columns = tdf.columns.str.replace('Num', '#')
-tdf = tdf[['Hostname'] + [col for col in tdf.columns if col != 'Hostname']]
+        # Calculations
+        #Todo: Proper title of columns
+        if server['Target'].iloc[0] != "":
+            server['PctCores'] = server['Num Cores'] / tgdf[tgdf['Target'] == server['Target'].iloc[0]]['Cores'].iloc[0]
+            server['PctMemory'] = server['Memory (GB)'] / tgdf[tgdf['Target'] == server['Target'].iloc[0]]['Memory'].iloc[0]
+        else:
+            server['PctCores'] = np.nan
+            server['PctMemory'] = np.nan
 
-# Calculations
+        tdf = tdf.append(server)
 
-tdf.to_excel(writer, sheet_name="Target")
+    tdf.columns = tdf.columns.str.replace('Num', '#')
+    tdf = tdf[['Hostname'] + [col for col in tdf.columns if col != 'Hostname']]
+    return tdf
 
+
+tfdf = applyRules(fdf)
+tfdf.to_excel(writer, sheet_name="Target IEDS ESX")
 
 
 ###VM
-# Apply Rules
-vtdf = pd.DataFrame()
-print("Applying virt rules: ...")
-# Iterate over rows
-for i in range(0, len(vfdf)):
-    # Select row as data frame preserving field types
-    server = pd.DataFrame(vfdf.iloc[i:i+1, :])
-
-    # Iterate over rules
-    server['Rules'] = ''
-    for idx, row in rdf.iterrows():
-        rule = row['Rule']
-
-        res = server.eval(rule)
-
-        if res.iloc[0]:
-            server['Target'] = rdf.iloc[idx, 1]
-            server['Rules'] = server['Rules'] + str(idx) + ', '
-
-    server = server.replace(regex=r', $', value="")
-    vtdf = vtdf.append(server)
-
-vtdf.columns = vtdf.columns.str.replace('Num', '#')
-vtdf = vtdf[['Hostname'] + [col for col in vtdf.columns if col != 'Hostname']]
-vtdf.to_excel(writer, sheet_name="VM Target")
-
-
-
-
+tvfdf = applyRules(vfdf)
+tvfdf.to_excel(writer, sheet_name="Target IEDS VMs")
 
 
 writer.save()
