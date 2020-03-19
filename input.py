@@ -88,11 +88,11 @@ adf.loc[adf.eval('`Hardware Abstraction` == "" & ( `Server Model` != "Vmware vir
 ### TODO: Which column is accurate for CPU core count
 adf['CPUCores'] = np.where(adf["CPU"].isnull(), adf["Num Cores"], adf["CPU"])
 adf['MemoryGB'] = np.where(adf["RAM (GB)"].isnull(), adf["Memory (GB)"], adf["RAM (GB)"])
+adf['Env'] = np.where(adf["Environment"]=="", adf["Environment_dup"], adf["Environment"])
 
 adf.to_excel(writer, sheet_name="IEDS ESX")
 
-
-
+# writer.save()
 
 
 ##### ### VM
@@ -125,10 +125,13 @@ filter_str = '`Hardware Abstraction` == "Bare-metal" & \
   `MOTS Name` != "Fbf" & \
   (`Purpose` != "Archangel" & `Purpose` != "Fbf" & `Purpose` != "Media server") & \
   (`Server Purpose` != "Archangel" & `Server Purpose` != "Bcv media server" & `Server Purpose` != "Fbf ls") & \
-  ((`Environment` == "Non-prod" | `Environment` == "Production" | `Environment` == "") | \
-  (`Environment_dup` == "Production" | `Environment_dup` == "") | `IEDS status` == "Production")'
+  (`Env` == "Non-prod" | `Env` == "Production" | `Env` == "")'
 
 fdf = adf[adf.eval(filter_str)]
+
+# fdf['Env'].unique()
+# fdf['Purpose'].unique()
+
 print(f"Filtered Data: {fdf.shape[0]} rows, {fdf.shape[1]} columns")
 fdf.to_excel(writer, sheet_name="Filter IEDS ESX")
 
