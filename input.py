@@ -1,9 +1,7 @@
 import os
 import pandas as pd
 import xlsxwriter
-import re
 import numpy as np
-# import datacompy
 
 
 # Import data
@@ -18,8 +16,6 @@ df['Cons Cores'] = np.where(df["Server model"].str.contains("Gen9"),
 
 
 # Target systems
-# 24 DIMMS in 360
-# 48 DIMMS in 580
 targets = [
     ['DL360-10-2-48-768', 48, 768],
     ['DL360-10-2-48-1536', 48, 1536],
@@ -79,9 +75,6 @@ for i in range(0, len(df)):
 
 
 
-
-
-
 writer = pd.ExcelWriter(os.path.join('output', 'targets.xlsx'), engine='xlsxwriter')
 workbook = writer.book
 tdf.to_excel(writer, sheet_name="Servers")
@@ -91,7 +84,7 @@ hide_columns = ['PrimaryKey', 'CreationTimestamp', 'CreatedBy', 'ModificationTim
        'ModifiedBy', 'Server serial number', 'Vendor', 'Notes',
        'Markets', 'Markets by line',
        'MOTS Name', 'MOTS ID',  'Instance', 'OS',
-       'OS Version', 'OS Major Version', 'Data Center', 'Hardware Abstraction',
+       'OS Version', 'OS Major Version', 'Hardware Abstraction',
        'Cluster Name', 'PartSurver URL',
        'Comments', 'Non_TLG MOTS', '~EOSL', 'Numbering',
        'App Dependencies', 'Add Date', 'Number of supported markets',
@@ -183,6 +176,16 @@ pt = pd.pivot_table(tdf,
                     dropna=False)
 pt.to_excel(writer, sheet_name="Model-Target")
 
+
+pt = pd.pivot_table(tdf,
+                    index=['Data Center', 'Environment'],
+                    columns=["Target"],
+                    values=["System name"],
+                    aggfunc={"System name": len},
+                    margins=True,
+                    margins_name="Total",
+                    dropna=False)
+pt.to_excel(writer, sheet_name="DCModel-Target")
 
 
 writer.save()
