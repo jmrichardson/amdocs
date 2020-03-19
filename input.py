@@ -197,6 +197,7 @@ rdf = rdf.replace(regex=r'# ', value="Num ")
 
 
 
+
 tdf = pd.DataFrame()
 print("Applying rules: ...")
 # Iterate over rows
