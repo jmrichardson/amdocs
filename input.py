@@ -85,6 +85,7 @@ adf.loc[adf.eval('`Hardware Abstraction` == "" & `Server Model` == "Vmware virtu
 adf.loc[adf.eval('`Hardware Abstraction` == "" & ( `Server Model` != "Vmware virtual platform" | `Server Model` != "")'), 'Hardware Abstraction'] = 'Bare-metal'
 
 # Add CPU col
+### TODO: Which column is accurate for CPU core count
 adf['CPUCores'] = np.where(adf["CPU"].isnull(), adf["Num Cores"], adf["CPU"])
 adf['MemoryGB'] = np.where(adf["RAM (GB)"].isnull(), adf["Memory (GB)"], adf["RAM (GB)"])
 
@@ -118,6 +119,7 @@ adf.to_excel(writer, sheet_name="IEDS ESX")
 # Filter
 # Note duplicate columns:  Comments_dup, Environment_dup, OS_dup
 ### TODO: keep Fbfls
+### TODO: add sds tools
 
 filter_str = '`Hardware Abstraction` == "Bare-metal" & \
   `MOTS Name` != "Fbf" & \
@@ -158,10 +160,9 @@ fdf.to_excel(writer, sheet_name="Filter IEDS ESX")
 
 # Target systems
 targets = [
-    ['DL360/2s/24/768GB', 48, 768],
-    ['DL360/2s/24/1.156TB', 48, 1536],
-    ['DL580/4s/24/3TB', 96, 3072],
-    ['DL580', 128, 2048],
+    ['DL360/2s/48/768GB', 48, 768],
+    ['DL360/2s/48/1.536TB', 48, 1536],
+    ['DL580/4s/96/3TB', 96, 3072],
     ['', np.nan, np.nan],
 ]
 tgdf = pd.DataFrame(targets, columns=['Target', 'Cores', 'Memory'])
@@ -177,16 +178,12 @@ tgdf.to_excel(writer, sheet_name="Targets")
 # Data words are fist letter capital rest undercase
 # One to one mapping
 rules = [
-    ['`Memory (GB)` < 768 & `Num Cores` < 48', "DL360/2s/24/768GB"],
-    ['`Memory (GB)` > 768 & `Num Cores` < 48', "DL360/2s/24/1.156TB"],
-    ['(`Memory (GB)` > 768 & `Memory (GB)` < 1536) & `Num Cores` < 48', "DL360/2s/24/1.156TB"],
-    ['`Memory (GB)` < 768 & `Num Cores` > 48', "DL580/4s/24/3TB"],
-    ['`Memory (GB)` > 768 & `Num Cores` > 48', "DL580/4s/24/3TB"],
-    ['(`Memory (GB)` > 768 & `Memory (GB)` < 1536) & `Num Cores` > 48', "DL580/4s/24/3TB"],
-    ['`Num Cores` > 48', "DL580/4s/24/3TB"],
-    ['`Memory (GB)` > 3000', "DL580/4s/24/3TB"],
-    ['`Purpose` == "Customer"', "DL580/4s/24/3TB"],
-    ['`Purpose` == "Customer - tra"', "DL580/4s/24/3TB"],
+    ['`MemoryGB` <= 768 & `CPUCores` <= 48', "DL360/2s/48/768GB"],
+    ['(`MemoryGB` > 768 & `MemoryGB` < 1536) & `CPUCores` < 48', "DL360/2s/48/1.536TB"],
+    ['`CPUCores` > 48', "DL580/4s/96/3TB"],
+    ['`MemoryGB` >= 3000', "DL580/4s/96/3TB"],
+    ['`Purpose` == "Customer"', "DL580/4s/96/3TB"],
+    ['`Purpose` == "Customer - tra"', "DL580/4s/96/3TB"],
 ]
 
 rdf = pd.DataFrame(rules, columns=['Rule', 'Target'])
