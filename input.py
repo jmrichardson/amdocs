@@ -1,193 +1,131 @@
 import os
 import pandas as pd
-import xlsxwriter
 import numpy as np
 
+print(f"Importing Data ...")
 
-# Import data
-df = pd.read_excel(os.path.join('data', 'Exported file.xlsx'))
-# Remove server names that are null
-print(f"Dataframe: {df.shape[0]} rows, {df.shape[1]} columns")
+# Import IEDS data
+ieds_df = pd.read_excel(os.path.join('data', 'New TLG Inventory 02-28-2020.xlsx'), sheet_name="Source-IEDS ref-Jeff")
+ieds_df = ieds_df[ieds_df['Server Name'].notna()]
+ieds_df = ieds_df[ieds_df['Server Name'].str.len().notna()]
+ieds_df.columns = ieds_df.columns.str.replace('Server Name', 'Hostname')
+ieds_df.sort_values("Hostname", inplace=True)
 
-cpu_ratio = 1
-df['Cons Cores'] = np.where(df["Server model"].str.contains("Gen9"),
-                                 df["Present State Cores"],
-                                 df["Present State Cores"] * cpu_ratio)
+# Import prod master
+prod_master_df = pd.read_excel(os.path.join('data', 'New TLG Inventory 02-28-2020.xlsx'), sheet_name="Prod Master")
+prod_master_df = prod_master_df[prod_master_df['ServerName'].notna()]
+prod_master_df = prod_master_df[prod_master_df['ServerName'].str.len().notna()]
+prod_master_df.columns = prod_master_df.columns.str.replace('ServerName', 'Hostname')
+prod_master_df.sort_values("Hostname", inplace=True)
 
+# Import ESX Production Servers
+esx_prd_srv_df = pd.read_excel(os.path.join('data', 'TLG-MOB ESX Servers v1.xlsx'), sheet_name="TLG Production Servers")
+esx_prd_srv_df.sort_values("Hostname", inplace=True)
 
-# Target systems
-targets = [
-    ['DL360-10-2-48-768', 48, 768],
-    ['DL360-10-2-48-1536', 48, 1536],
-    ['DL580-10-4-96-1536', 96, 1536],
-    ['DL580-10-4-96-3072', 96, 3072],
-    ['', np.nan, np.nan],
-]
-tgdf = pd.DataFrame(targets, columns=['Target', 'Cores', 'Memory'])
+# Import ESX Production ESX
+esx_prd_esx_df = pd.read_excel(os.path.join('data', 'TLG-MOB ESX Servers v1.xlsx'), sheet_name="TLG Production ESX")
+esx_prd_esx_df.sort_values("Hostname", inplace=True)
 
-### Rules
-# Each rule is applied to every row
-# The last matching rule takes precedence
-# Data words are fist letter capital rest undercase
-# One to one mapping
-rules = [
-    ['s["Present State RAM GB"] <= 768 & s["Cons Cores"] <= 48', "DL360-10-2-48-768"],
-    ['(s["Present State RAM GB"] > 768 & s["Present State RAM GB"] < 1536) & s["Cons Cores"] <= 48', "DL360-10-2-48-1536"],
-    ['s["Cons Cores"] > 48 & s["Present State RAM GB"] <= 1536', "DL580-10-4-96-1536"],
-    ['s["Present State RAM GB"] > 1536', "DL580-10-4-96-3072"],
-    ['s["Server Purpose"].str.contains("Customer")', "DL580-10-4-96-3072"],
-]
-rdf = pd.DataFrame(rules, columns=['Rule', 'Target'])
+# Combined ESX data
+esx_df = pd.concat([esx_prd_esx_df, esx_prd_srv_df])
+esx_df.sort_values("Hostname", inplace=True)
+esx_df.drop_duplicates(subset="Hostname", keep=False, inplace=True)
 
-# rule = 'df["Present State RAM GB"] <= 768 & df["Present State Cores"] <= 48'
-# res = pd.eval(rule, engine='python')
-# res = pd.eval(rule, engine='python')
+# Combine Ieds and Esx
+ieds_esx_df = pd.merge(left=ieds_df, right=esx_df, how='outer', left_on='Hostname', right_on='Hostname', suffixes=("", "_dup"))
+ieds_esx_df = ieds_esx_df.sort_index(axis=1)
+ieds_esx_df.sort_values("Hostname", inplace=True)
+ieds_esx_df.columns = ieds_esx_df.columns.str.replace('#', 'Num')
+dups = ieds_esx_df[ieds_esx_df.duplicated('Hostname')]
+ieds_esx_df = ieds_esx_df[['Hostname'] + [col for col in ieds_esx_df.columns if col != 'Hostname']]
 
-tdf = pd.DataFrame()
-print("Applying rules: ...")
-# Iterate over rows
-for i in range(0, len(df)):
-    # Select row as data frame preserving field types
-    s = pd.DataFrame(df.iloc[i:i+1, :]).copy()
+ieds_esx_df['Hostname'] = ieds_esx_df['Hostname'].str.lower()
+# Label hardware abstraction
+ieds_esx_df.loc[ieds_esx_df.eval('`Hardware Abstraction` == "" & `Server Model` == "Vmware virtual platform"'), 'Hardware Abstraction'] = 'Vmguest'
+ieds_esx_df.loc[ieds_esx_df.eval('`Hardware Abstraction` == "" & ( `Server Model` != "Vmware virtual platform" | `Server Model` != "")'), 'Hardware Abstraction'] = 'Bare-metal'
 
-    # Iterate over rules
-    s['Rules'] = ''
-    s['Target'] = ''
-    for idx, row in rdf.iterrows():
-        rule = row['Rule']
-        res = pd.eval(rule, engine='python')
-        if res.iloc[0]:
-            s['Target'] = rdf.iloc[idx, 1]
-            s['Rules'] = s['Rules'] + str(idx) + ', '
+# Import sudeep data
+sudeep_df = pd.read_excel(os.path.join('data', 'Server_list 2020-03-19.xlsx'))
+sudeep_df.sort_values("System name", inplace=True)
+sudeep_df = sudeep_df[['System name'] + [col for col in sudeep_df.columns if col != 'System name']]
 
-    s = s.replace(regex=r', $', value="")
-
-    # Calculations
-    #Todo: Proper title of columns
-    if s['Target'].iloc[0] != "":
-        s['PctCores'] = s['Cons Cores'] / tgdf[tgdf['Target'] == s['Target'].iloc[0]]['Cores'].iloc[0]
-        s['PctMemory'] = s['Present State RAM GB'] / tgdf[tgdf['Target'] == s['Target'].iloc[0]]['Memory'].iloc[0]
-    else:
-        s['PctCores'] = np.nan
-        s['PctMemory'] = np.nan
-
-    tdf = tdf.append(s)
+# Combine sudeep's data with ieds data, keep sudeep's data but fill in any missing values
+sdf = sudeep_df.set_index('System name', drop=False)
+iedf = ieds_esx_df.rename(columns={'Hostname':'System name'})
+iedf = iedf.set_index('System name', drop=False)
+iedf = iedf[iedf['System name'].isin(sdf['System name'])]
+sudeep_ieds_esx_df = sdf.combine_first(iedf)
+sudeep_ieds_esx_df = sudeep_ieds_esx_df.reset_index(drop=True)
+sudeep_ieds_esx_df.sort_values("System name", inplace=True)
+sudeep_ieds_esx_df = sudeep_ieds_esx_df[['System name'] + [col for col in sudeep_ieds_esx_df.columns if col != 'System name']]
 
 
+# Add combined columns
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['Present State Cores'].isna(), 'Present State Cores'] = sudeep_ieds_esx_df["CPU"]
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['Present State Cores'].isna(), 'Present State Cores'] = sudeep_ieds_esx_df["Num Cores"]
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['Present State RAM GB'].isna(), 'Present State RAM GB'] = sudeep_ieds_esx_df["Memory (GB)"]
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['Present State RAM GB'].isna(), 'Present State RAM GB'] = sudeep_ieds_esx_df["RAM (GB)"]
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['Environment'].isna(), 'Environment'] = sudeep_ieds_esx_df["Environment_dup"]
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['Server Model'].isna(), 'Server Model'] = sudeep_ieds_esx_df["Hardware Model Description"]
 
-writer = pd.ExcelWriter(os.path.join('output', 'targets.xlsx'), engine='xlsxwriter')
-workbook = writer.book
-tdf.to_excel(writer, sheet_name="Servers")
-worksheet = writer.sheets["Servers"]
+# Modify data
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['CPU Speed'].isnull(), 'CPU Speed'] = sudeep_ieds_esx_df["CPU model"]
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['CPU Speed'] == "2.40GHz", 'CPU Speed'] = 2400
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['CPU Speed'] == "2.50GHz", 'CPU Speed'] = 2500
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['CPU Speed'] == "2.13GHz", 'CPU Speed'] = 2130
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['CPU Speed'] == "Intel(R) Xeon(R) CPU E7- 4870  @ 2.40GHz", 'CPU Speed'] = 2400
+sudeep_ieds_esx_df = sudeep_ieds_esx_df.astype({"CPU Speed":int})
 
-hide_columns = ['PrimaryKey', 'CreationTimestamp', 'CreatedBy', 'ModificationTimestamp',
-       'ModifiedBy', 'Server serial number', 'Vendor', 'Notes',
-       'Markets', 'Markets by line',
-       'MOTS Name', 'MOTS ID',  'Instance', 'OS',
-       'OS Version', 'OS Major Version', 'Hardware Abstraction',
-       'Cluster Name', 'PartSurver URL',
-       'Comments', 'Non_TLG MOTS', '~EOSL', 'Numbering',
-       'App Dependencies', 'Add Date', 'Number of supported markets',
-       'Number of targeted DCs', 'Targeted DCs', 'ESX host file foreign key',
-       'Parent ESX host', 'ESX Host Count of VMs', 'ESX Host Hosted Cores',
-       'ESX Host Hosted CPUs', 'ESX Host Hosted RAM',
-       'ESX Host Hosted Storage', 'ESX Host Targeted Data Centers',
-       'ESX Host Targeted Data Center Count',
-       'Unique server name to count for present state',
-       '∑Present State CPUs', 'Present State Cores_with_HT',
-       '∑Present State cores',
-       '∑Present State RAM GB', '∑Storage GB',
-       'CPU by 2', 'Current State', 'Consolidation method',
-       'g ESX host CPU overhead', 'g ESX host RAM overhead',
-       'g ESX host Storage overhead', 'Future State', 'Future State CPU',
-       'Future State Cores', 'Future State RAM', 'Future State Storage',
-       'Future State 1_1', 'DR needed', 'Future State CPU DR',
-       'Future State Cores DR', 'Future State RAM DR',
-       'Future State Storage DR', 'Future State 1_1 DR', 'Target Data Center',
-       'Cores per physical CPU', 'Count of servers', 'Migration method',
-       'Current configuration from catalog',
-       'Current configuration performance figure',
-       'Replacement configuration from catalog',
-       'Replacement configuration performance figure', 'Replacement fraction',
-       'Consolidation group foreign key', 'Consolidation group',
-       'HT supported', 'Working set',
-       'List of markets by DBs_and_Apps', 'Number of markets by DB_and_apps',
-       'Count of DBs_and_Apps', 'Fraction of cores Stin']
-
-for i in range(1, len(tdf.columns)):
-    col = tdf.columns[i-1]
-    width = max([len(str(s)) for s in tdf[col].values] + [len(col)])
-    if col in hide_columns:
-        worksheet.set_column(i, i, width, None, {'hidden': True})
-    else:
-        worksheet.set_column(i, i, width)
-
-tgdf.to_excel(writer, sheet_name="Targets")
-rdf.to_excel(writer, sheet_name="Rules")
-
-pt = pd.pivot_table(tdf,
-                    index=["Target"],
-                    values=["System name"],
-                    aggfunc={"System name": len},
-                    margins=True,
-                    margins_name="Total",
-                    dropna=False)
-pt.to_excel(writer, sheet_name="TargetCount")
-
-pt = pd.pivot_table(tdf,
-                    index=["Server Purpose", "Present State Cores", "Present State RAM GB"],
-                    columns=["Target"],
-                    values=["System name"],
-                    aggfunc={"System name": len},
-                    margins=True,
-                    margins_name="Total",
-                    dropna=True)
-pt.to_excel(writer, sheet_name="ServerPurposeCoresMem-Target")
+# sudeep_ieds_esx_df.to_excel("s.xlsx")
 
 
-pt = pd.pivot_table(tdf,
-                    index=['App Tier', 'Server Purpose'],
-                    columns=["Target"],
-                    values=["System name"],
-                    aggfunc={"System name": len},
-                    margins=True,
-                    margins_name="Total",
-                    dropna=True)
-pt.to_excel(writer, sheet_name="AppPurpose-Target")
 
 
-pt = pd.pivot_table(tdf,
-                    index=['App Tier'],
-                    columns=["Target"],
-                    values=["System name"],
-                    aggfunc={"System name": len},
-                    margins=True,
-                    margins_name="Total",
-                    dropna=False)
-pt.to_excel(writer, sheet_name="App-Target")
+# Repalce nans with empty string for non float columns
+for col in sudeep_ieds_esx_df.columns:
+    if sudeep_ieds_esx_df[col].dtype.kind == 'O':
+        sudeep_ieds_esx_df[col].replace(np.nan, '', regex=True, inplace=True)
 
-pt = pd.pivot_table(tdf,
-                    index=['Server model'],
-                    columns=["Target"],
-                    values=["System name"],
-                    aggfunc={"System name": len},
-                    margins=True,
-                    margins_name="Total",
-                    dropna=False)
-pt.to_excel(writer, sheet_name="Model-Target")
+# Capitalize first letter and lowercase the rest of each word (consistent data)
+for col in sudeep_ieds_esx_df.columns:
+    if sudeep_ieds_esx_df[col].dtype.kind == 'O':
+        sudeep_ieds_esx_df[col] = np.where(sudeep_ieds_esx_df[col].str.lower().isnull(),
+                                           sudeep_ieds_esx_df[col],
+                                           sudeep_ieds_esx_df[col].str.lower().str.capitalize())
 
 
-pt = pd.pivot_table(tdf,
-                    index=['Data Center', 'Environment'],
-                    columns=["Target"],
-                    values=["System name"],
-                    aggfunc={"System name": len},
-                    margins=True,
-                    margins_name="Total",
-                    dropna=False)
-pt.to_excel(writer, sheet_name="DCModel-Target")
+sudeep_ieds_esx_df['Consolidate'] ="Many"
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df["Server Purpose"].str.contains("Customer"), "Consolidate"] = "One"
+sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df["Server Purpose"].str.contains("drm"), "Consolidate"] = "One"
 
 
-writer.save()
-writer.close()
+# Add CPU ratio compression column
+# sudeep_ieds_esx_df['Core Consolidation Ratio'] = 1
+# sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['Server Model'].str.lower().str.contains("gen9", na=False), 'Core Consolidation Ratio'] = .9
+# sudeep_ieds_esx_df.loc[sudeep_ieds_esx_df['Server Model'].str.lower().str.contains("g7", na=False), 'Core Consolidation Ratio'] = .8
+
+
+# Specint Data
+# spec = sudeep_ieds_esx_df[['Server Model', 'Specint','CPU Model', 'CPU Speed', 'Hardware Model Description']]
+# spec = spec.groupby('Server Model')['Specint'].max().reset_index()
+# spec.to_excel("output/specint.xlsx")
+
+# perf = sudeep_ieds_esx_df[['Server Model', 'Hardware Model Description', 'CPU Model', 'CPU Speed','Specint']].drop_duplicates()
+# perf = sudeep_ieds_esx_df[['Server Model', 'CPU Speed']].drop_duplicates()
+# perf.to_excel("output/perf.xlsx")
+# sudeep_ieds_esx_df['CPU Speed'].unique()
+
+# sudeep_ieds_esx_df.to_excel("all.xlsx")
+
+
+# pt = pd.pivot_table(sudeep_ieds_esx_df,
+                    # index=["Server Model"],
+                    # values=["System name"],
+                    # aggfunc='count',
+                    # margins=True,
+                    # margins_name="Total",
+                    # dropna=False)
+# pt.to_excel("output/ModelCounts.xlsx")
+
+
 
